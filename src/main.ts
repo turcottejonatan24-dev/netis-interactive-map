@@ -70,7 +70,8 @@ controls.autoRotate = true
 controls.autoRotateSpeed = 0.15
 
 // Lights
-scene.add(new THREE.AmbientLight(0x111827, 0.3))
+const ambient = new THREE.AmbientLight(0x111827, 0.3)
+scene.add(ambient)
 scene.add(new THREE.HemisphereLight(0x0a0e2a, 0x000000, 0.5))
 const dirLight = new THREE.DirectionalLight(0x4466ff, 1.5)
 dirLight.position.set(50, 80, 30)
@@ -102,12 +103,52 @@ document.getElementById('vr-btn')!.addEventListener('click', () => vrButton.clic
 
 const arButton = ARButton.createButton(renderer, {
   requiredFeatures: ['hit-test'],
-  optionalFeatures: ['dom-overlay'],
+  optionalFeatures: ['dom-overlay', 'light-estimation'],
   domOverlay: { root: document.body }
 })
 arButton.style.display = 'none'
 document.body.appendChild(arButton)
-document.getElementById('ar-btn')!.addEventListener('click', () => arButton.click())
+
+document.getElementById('ar-btn')!.addEventListener('click', () => {
+  renderer.setPixelRatio(1)
+  renderer.shadowMap.enabled = false
+  scene.fog = null
+  ambient.intensity = 1.5
+  
+  gltfScene?.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      const name = child.name
+      if (name === 'Ground' || 
+          name.startsWith('RdH') || 
+          name.startsWith('RdV') ||
+          name.startsWith('SwH') ||
+          name.startsWith('SwV')) {
+        child.visible = false
+      }
+    }
+  })
+  arButton.click()
+})
+
+renderer.xr.addEventListener('sessionstart', () => {
+  if (gltfScene) {
+    gltfScene.scale.set(0.02, 0.02, 0.02)
+    gltfScene.position.set(0, -0.5, -1)
+  }
+})
+
+renderer.xr.addEventListener('sessionend', () => {
+  renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5))
+  scene.fog = new THREE.FogExp2(0x020510, isMobile ? 0.015 : 0.007)
+  ambient.intensity = 0.3
+  gltfScene?.traverse((child) => {
+    if (child instanceof THREE.Mesh) child.visible = true
+  })
+  if (gltfScene) {
+    gltfScene.scale.set(1, 1, 1)
+    gltfScene.position.set(0, 0, 0)
+  }
+})
 
 const controllerFactory = new XRControllerModelFactory()
 const controller1 = renderer.xr.getController(0)
