@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import gsap from 'gsap'
 
+// ─── RENDERER ───────────────────────────────────────────────────────────────
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x020510)
 scene.fog = new THREE.FogExp2(0x020510, 0.009)
@@ -24,6 +25,7 @@ labelRenderer.domElement.style.top = '0'
 labelRenderer.domElement.style.pointerEvents = 'none'
 document.body.appendChild(labelRenderer.domElement)
 
+// ─── CAMERA & CONTROLS ───────────────────────────────────────────────────────
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000)
 camera.position.set(50, 35, 50)
 camera.lookAt(0, 0, 0)
@@ -37,12 +39,7 @@ controls.maxDistance = 200
 controls.autoRotate = true
 controls.autoRotateSpeed = 0.15
 
-// --- TOP-LEVEL STATE ---
-let isolatedObject: THREE.Mesh | null = null
-let gltfScene: THREE.Group | null = null
-let hotspots: { div: HTMLElement; position: THREE.Vector3 }[] = []
-let floatingLabels: { div: HTMLElement; position: THREE.Vector3 }[] = []
-
+// ─── LIGHTS ──────────────────────────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0x111827, 0.1))
 
 const dirLight = new THREE.DirectionalLight(0x4466ff, 1.5)
@@ -68,25 +65,61 @@ scene.add(warmPoint)
 
 scene.add(new THREE.HemisphereLight(0x0a0e2a, 0x000000, 0.5))
 
+// ─── STEP 1: TOP LEVEL STATE ──────────────────────────────────────────────────
+let gltfScene: THREE.Group | null = null
+let isolatedObject: THREE.Mesh | null = null
+let hotspots: { div: HTMLElement; position: THREE.Vector3 }[] = []
+let floatingLabels: { div: HTMLElement; position: THREE.Vector3; meshName: string }[] = []
+let hoveredMesh: THREE.Mesh | null = null
 const raycaster = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
 
-// --- BUILDING DATA (PRODUCT CATALOG) ---
-function getBuildingData(name: string) {
-  const catalog: Record<string, any> = {
-    'T0': { name: 'SOLAR SOLUTIONS', category: 'ÉNERGIE RENOUVELABLE', color: '#f59e0b', tagline: 'Production solaire intelligente pour bâtiments tertiaires', benefits: ['Réduction facture -60%', 'ROI en 4 ans', 'Monitoring temps réel'], video: 'https://www.youtube.com/watch?v=example1', brochure: '/brochures/solar.pdf', contact: 'mailto:contact@netis.com' },
-    'T1': { name: 'SMART GENERATOR', category: 'ALIMENTATION DE SECOURS', color: '#3b82f6', tagline: 'Générateurs industriels haute performance', benefits: ['Démarrage automatique', 'Zéro coupure', 'Maintenance prédictive'], video: 'https://www.youtube.com/watch?v=example2', brochure: '/brochures/generator.pdf', contact: 'mailto:contact@netis.com' },
-    'T2': { name: 'HVAC SYSTEMS', category: 'CLIMATISATION & VENTILATION', color: '#06b6d4', tagline: 'Systèmes CVC intelligents et économes', benefits: ['Économie énergie -40%', 'Qualité air certifiée', 'Contrôle à distance'], video: 'https://www.youtube.com/watch?v=example3', brochure: '/brochures/hvac.pdf', contact: 'mailto:contact@netis.com' },
-    'T3': { name: 'SMART LIGHTING', category: 'ÉCLAIRAGE INTELLIGENT', color: '#8b5cf6', tagline: 'Solutions LED connectées pour tous vos espaces', benefits: ['Économie -70% vs halogène', 'Détection présence', 'Ambiances programmables'], video: 'https://www.youtube.com/watch?v=example4', brochure: '/brochures/lighting.pdf', contact: 'mailto:contact@netis.com' },
-    'T4': { name: 'BMS PLATFORM', category: 'GESTION TECHNIQUE', color: '#10b981', tagline: 'Plateforme de gestion technique centralisée', benefits: ['Dashboard unifié', 'Alertes temps réel', 'Rapports automatiques'], video: 'https://www.youtube.com/watch?v=example5', brochure: '/brochures/bms.pdf', contact: 'mailto:contact@netis.com' },
-    'M0': { name: 'FIRE SAFETY', category: 'SÉCURITÉ INCENDIE', color: '#ef4444', tagline: 'Détection et extinction automatique incendie', benefits: ['Détection précoce', 'Conformité normes', 'Intervention automatique'], video: 'https://www.youtube.com/watch?v=example6', brochure: '/brochures/fire.pdf', contact: 'mailto:contact@netis.com' },
-    'M1': { name: 'ACCESS CONTROL', category: 'CONTRÔLE D\'ACCÈS', color: '#f97316', tagline: 'Gestion intelligente des accès et badges', benefits: ['Accès biométrique', 'Historique complet', 'Intégration RH'], video: 'https://www.youtube.com/watch?v=example7', brochure: '/brochures/access.pdf', contact: 'mailto:contact@netis.com' },
-    'M2': { name: 'CCTV & SECURITY', category: 'VIDÉOSURVEILLANCE', color: '#6366f1', tagline: 'Surveillance intelligente par caméras IP', benefits: ['IA détection anomalies', 'Stockage cloud', 'Vision nocturne'], video: 'https://www.youtube.com/watch?v=example8', brochure: '/brochures/cctv.pdf', contact: 'mailto:contact@netis.com' },
-  }
-  return catalog[name] || null
+// ─── STEP 2: PRODUCT CATALOG ──────────────────────────────────────────────────
+const catalog: Record<string, any> = {
+  'T0': { name: 'SOLAR SOLUTIONS', category: 'ÉNERGIE RENOUVELABLE', color: '#f59e0b', tagline: 'Production solaire intelligente pour bâtiments tertiaires', benefits: ['Réduction facture -60%', 'ROI en 4 ans', 'Monitoring temps réel'], video: 'https://youtube.com', brochure: '/brochures/solar.pdf', contact: 'mailto:contact@netis.com' },
+  'T1': { name: 'SMART GENERATOR', category: 'ALIMENTATION DE SECOURS', color: '#3b82f6', tagline: 'Générateurs industriels haute performance', benefits: ['Démarrage automatique', 'Zéro coupure', 'Maintenance prédictive'], video: 'https://youtube.com', brochure: '/brochures/generator.pdf', contact: 'mailto:contact@netis.com' },
+  'T2': { name: 'HVAC SYSTEMS', category: 'CLIMATISATION & VENTILATION', color: '#06b6d4', tagline: 'Systèmes CVC intelligents et économes', benefits: ['Économie énergie -40%', 'Qualité air certifiée', 'Contrôle à distance'], video: 'https://youtube.com', brochure: '/brochures/hvac.pdf', contact: 'mailto:contact@netis.com' },
+  'T3': { name: 'SMART LIGHTING', category: 'ÉCLAIRAGE INTELLIGENT', color: '#8b5cf6', tagline: 'Solutions LED connectées pour tous vos espaces', benefits: ['Économie -70%', 'Détection présence', 'Ambiances programmables'], video: 'https://youtube.com', brochure: '/brochures/lighting.pdf', contact: 'mailto:contact@netis.com' },
+  'T4': { name: 'BMS PLATFORM', category: 'GESTION TECHNIQUE', color: '#10b981', tagline: 'Plateforme de gestion technique centralisée', benefits: ['Dashboard unifié', 'Alertes temps réel', 'Rapports automatiques'], video: 'https://youtube.com', brochure: '/brochures/bms.pdf', contact: 'mailto:contact@netis.com' },
+  'M0': { name: 'FIRE SAFETY', category: 'SÉCURITÉ INCENDIE', color: '#ef4444', tagline: 'Détection et extinction automatique incendie', benefits: ['Détection précoce', 'Conformité normes', 'Intervention auto'], video: 'https://youtube.com', brochure: '/brochures/fire.pdf', contact: 'mailto:contact@netis.com' },
+  'M1': { name: 'ACCESS CONTROL', category: "CONTRÔLE D'ACCÈS", color: '#f97316', tagline: 'Gestion intelligente des accès et badges', benefits: ['Accès biométrique', 'Historique complet', 'Intégration RH'], video: 'https://youtube.com', brochure: '/brochures/access.pdf', contact: 'mailto:contact@netis.com' },
+  'M2': { name: 'CCTV & SECURITY', category: 'VIDÉOSURVEILLANCE', color: '#6366f1', tagline: 'Surveillance intelligente par caméras IP', benefits: ['IA détection anomalies', 'Stockage cloud', 'Vision nocturne'], video: 'https://youtube.com', brochure: '/brochures/cctv.pdf', contact: 'mailto:contact@netis.com' },
 }
 
-// --- HOTSPOT SYSTEM ---
+// ─── STEP 3: HOVER BUBBLE ────────────────────────────────────────────────────
+const bubble = document.createElement('div')
+bubble.id = 'hover-bubble'
+bubble.style.cssText = `
+  position: fixed;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid white;
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  z-index: 50;
+  transition: transform 0.2s, background 0.2s;
+  pointer-events: auto;
+`
+bubble.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:white;"></div>`
+document.body.appendChild(bubble)
+
+const ring = document.createElement('div')
+ring.style.cssText = `
+  position:absolute;
+  width:40px;height:40px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,0.5);
+  animation: pulse 1.5s ease-out infinite;
+`
+bubble.appendChild(ring)
+
+// ─── HOTSPOT SYSTEM ──────────────────────────────────────────────────────────
 const hotspotContainer = document.getElementById('hotspots')!
 
 function clearHotspots() { hotspotContainer.innerHTML = ''; hotspots = [] }
@@ -113,86 +146,6 @@ document.getElementById('detail-close')!.addEventListener('click', () => {
   document.getElementById('detail-panel')!.style.display = 'none'
 })
 
-function showBuildingPanel(data: any) {
-  document.getElementById('panel-category')!.textContent = data.category
-  document.getElementById('panel-name')!.textContent = data.name
-  document.getElementById('panel-tagline')!.textContent = data.tagline
-  const benefitsEl = document.getElementById('panel-benefits')!
-  benefitsEl.innerHTML = data.benefits.map((b: string) =>
-    `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;font-family:sans-serif;"><div style="width:4px;height:4px;border-radius:50%;background:#4dff9b;flex-shrink:0;"></div><span style="opacity:0.8;">${b}</span></div>`
-  ).join('')
-  document.getElementById('btn-video')!.onclick = () => window.open(data.video, '_blank')
-  document.getElementById('btn-brochure')!.onclick = () => window.open(data.brochure, '_blank')
-  document.getElementById('btn-contact')!.onclick = () => window.open(data.contact, '_blank')
-  document.getElementById('panel-header')!.style.borderTop = `3px solid ${data.color}`
-  document.getElementById('panel')!.style.display = 'block'
-}
-
-// --- ISOLATION SYSTEM ---
-function isolateObject(mesh: THREE.Mesh) {
-  isolatedObject = mesh
-
-  const box = new THREE.Box3().setFromObject(mesh)
-  const center = box.getCenter(new THREE.Vector3())
-  const size = box.getSize(new THREE.Vector3())
-  const maxDim = Math.max(size.x, size.y, size.z)
-
-  gltfScene!.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return
-
-    if (child === mesh) {
-      child.visible = true
-      return
-    }
-
-    // For windows - only show if they are within the building's bounding box
-    if (child.name.startsWith('WOn') || child.name.startsWith('WOff')) {
-      const childBox = new THREE.Box3().setFromObject(child)
-      const childCenter = childBox.getCenter(new THREE.Vector3())
-      // Check if window center is inside the building box (expanded slightly)
-      const expandedBox = box.clone().expandByScalar(5)
-      child.visible = expandedBox.containsPoint(childCenter)
-      return
-    }
-
-    // Hide everything else
-    child.visible = false
-  })
-
-  gsap.to(controls.target, {
-    x: center.x, y: center.y, z: center.z,
-    duration: 1.0, ease: 'power3.out'
-  })
-  gsap.to(camera.position, {
-    x: center.x + maxDim * 3,
-    y: center.y + maxDim * 1.5,
-    z: center.z + maxDim * 3,
-    duration: 1.0, ease: 'power3.out'
-  })
-
-  controls.autoRotate = true
-  controls.autoRotateSpeed = 0.6
-  controls.minDistance = maxDim * 1.2
-  controls.maxDistance = maxDim * 8
-  document.getElementById('back-btn')!.style.display = 'flex'
-}
-
-function exitIsolation() {
-  if (!isolatedObject) return
-  gltfScene?.traverse((child) => { if (child instanceof THREE.Mesh) child.visible = true })
-  isolatedObject = null
-  controls.autoRotate = true
-  controls.autoRotateSpeed = 0.15
-  controls.minDistance = 20
-  controls.maxDistance = 200
-  gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 1.5, ease: 'power3.out' })
-  gsap.to(camera.position, { x: 50, y: 35, z: 50, duration: 1.5, ease: 'power3.out' })
-  document.getElementById('back-btn')!.style.display = 'none'
-  document.getElementById('panel')!.style.display = 'none'
-  document.getElementById('detail-panel')!.style.display = 'none'
-  clearHotspots()
-}
-
 function spawnHotspotsOnObject(mesh: THREE.Mesh) {
   clearHotspots()
   const box = new THREE.Box3().setFromObject(mesh)
@@ -207,60 +160,170 @@ function spawnHotspotsOnObject(mesh: THREE.Mesh) {
   points.forEach(p => { hotspots.push(createHotspot(p.pos, p.label, p.data)) })
 }
 
-// --- EVENT LISTENERS ---
+// ─── STEP 7: ISOLATE OBJECT ──────────────────────────────────────────────────
+function isolateObject(mesh: THREE.Mesh) {
+  isolatedObject = mesh
+
+  const box = new THREE.Box3().setFromObject(mesh)
+  const center = box.getCenter(new THREE.Vector3())
+  const size = box.getSize(new THREE.Vector3())
+  const maxDim = Math.max(size.x, size.y, size.z)
+
+  gltfScene!.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    if (child === mesh) { child.visible = true; return }
+    if (child.name.startsWith('WOn') || child.name.startsWith('WOff')) {
+      const childBox = new THREE.Box3().setFromObject(child)
+      const childCenter = childBox.getCenter(new THREE.Vector3())
+      const expandedBox = box.clone().expandByScalar(5)
+      child.visible = expandedBox.containsPoint(childCenter)
+      return
+    }
+    child.visible = false
+  })
+
+  gsap.to(controls.target, { x: center.x, y: center.y, z: center.z, duration: 1.0, ease: 'power3.out' })
+  gsap.to(camera.position, {
+    x: center.x + maxDim * 3,
+    y: center.y + maxDim * 1.5,
+    z: center.z + maxDim * 3,
+    duration: 1.0, ease: 'power3.out'
+  })
+
+  controls.autoRotate = true
+  controls.autoRotateSpeed = 0.6
+  controls.minDistance = maxDim * 1.2
+  controls.maxDistance = maxDim * 8
+  document.getElementById('back-btn')!.style.display = 'flex'
+}
+
+// ─── STEP 8: EXIT ISOLATION ──────────────────────────────────────────────────
+function exitIsolation() {
+  isolatedObject = null
+  gltfScene!.traverse((child) => { if (child instanceof THREE.Mesh) child.visible = true })
+  controls.autoRotate = true
+  controls.autoRotateSpeed = 0.15
+  controls.minDistance = 20
+  controls.maxDistance = 200
+  gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 1.5, ease: 'power3.out' })
+  gsap.to(camera.position, { x: 50, y: 35, z: 50, duration: 1.5, ease: 'power3.out' })
+  document.getElementById('back-btn')!.style.display = 'none'
+  document.getElementById('panel')!.style.display = 'none'
+  clearHotspots()
+}
+;(window as any).exitIsolation = exitIsolation
+
+// ─── EVENT LISTENERS ─────────────────────────────────────────────────────────
 document.getElementById('back-btn')!.addEventListener('click', (e) => { e.stopPropagation(); exitIsolation() })
 document.getElementById('panel-close')!.addEventListener('click', (e) => { e.stopPropagation(); exitIsolation() })
 
-window.addEventListener('click', (e) => {
-  if ((e.target as HTMLElement).closest('#panel, #detail-panel, #back-btn, #hotspots')) return
-
-  mouse.x = (e.clientX / window.innerWidth) * 2 - 1
-  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
-  raycaster.setFromCamera(mouse, camera)
-
-  if (isolatedObject) return  // hotspots handle their own clicks
-
-  if (!gltfScene) return
-
-  const allMeshes: THREE.Mesh[] = []
-  gltfScene.traverse((child) => { if (child instanceof THREE.Mesh) allMeshes.push(child) })
-
-  const intersects = raycaster.intersectObjects(allMeshes, false)
-  if (intersects.length === 0) return
-
-  const hit = intersects[0].object as THREE.Mesh
-  const data = getBuildingData(hit.name)
-  if (!data) return
-
-  showBuildingPanel(data)
-  isolateObject(hit)
-  spawnHotspotsOnObject(hit)
-})
-
+// STEP 4: MOUSEMOVE - hover bubble
 window.addEventListener('mousemove', (e) => {
-  mouse.x = (e.clientX / window.innerWidth) * 2 - 1
-  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
-  raycaster.setFromCamera(mouse, camera)
-
   if (isolatedObject) {
-    const hits = raycaster.intersectObject(isolatedObject, false)
-    const mat = isolatedObject.material as THREE.MeshStandardMaterial
-    if (hits.length > 0) {
-      mat.emissive = new THREE.Color(0x2233ff)
-      mat.emissiveIntensity = 0.2
-    } else {
-      mat.emissiveIntensity = 0
-    }
     document.body.style.cursor = 'grab'
+    bubble.style.display = 'none'
     return
   }
 
-  if (!gltfScene) return
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
+  raycaster.setFromCamera(mouse, camera)
+
   const allMeshes: THREE.Mesh[] = []
-  gltfScene.traverse((child) => { if (child instanceof THREE.Mesh) allMeshes.push(child) })
-  const intersects = raycaster.intersectObjects(allMeshes, false)
-  const hit = intersects.find(i => getBuildingData((i.object as THREE.Mesh).name))
-  document.body.style.cursor = hit ? 'pointer' : 'default'
+  gltfScene?.traverse((c) => { if (c instanceof THREE.Mesh) allMeshes.push(c) })
+
+  const hits = raycaster.intersectObjects(allMeshes, false)
+  const hit = hits.find(h => catalog[(h.object as THREE.Mesh).name])
+
+  if (hit) {
+    hoveredMesh = hit.object as THREE.Mesh
+    document.body.style.cursor = 'pointer'
+
+    const box = new THREE.Box3().setFromObject(hoveredMesh)
+    const top = new THREE.Vector3(
+      (box.min.x + box.max.x) / 2,
+      box.max.y + 4,
+      (box.min.z + box.max.z) / 2
+    )
+    const projected = top.clone().project(camera)
+    const x = (projected.x * 0.5 + 0.5) * window.innerWidth
+    const y = (-projected.y * 0.5 + 0.5) * window.innerHeight
+
+    bubble.style.display = 'flex'
+    bubble.style.left = x + 'px'
+    bubble.style.top = y + 'px'
+    bubble.style.borderColor = catalog[hoveredMesh.name]?.color || 'white'
+    const dot = bubble.querySelector('div') as HTMLElement
+    if (dot) dot.style.background = catalog[hoveredMesh.name]?.color || 'white'
+  } else {
+    hoveredMesh = null
+    document.body.style.cursor = 'default'
+    bubble.style.display = 'none'
+  }
+})
+
+// STEP 5: BUBBLE CLICK - show panel + zoom
+bubble.addEventListener('click', (e) => {
+  e.stopPropagation()
+  if (!hoveredMesh) return
+  const data = catalog[hoveredMesh.name]
+  if (!data) return
+
+  const box = new THREE.Box3().setFromObject(hoveredMesh)
+  const center = box.getCenter(new THREE.Vector3())
+  const size = box.getSize(new THREE.Vector3())
+  const maxDim = Math.max(size.x, size.y, size.z)
+
+  gsap.to(controls.target, { x: center.x, y: center.y, z: center.z, duration: 1.2, ease: 'power3.out' })
+  gsap.to(camera.position, {
+    x: center.x + maxDim * 4,
+    y: center.y + maxDim * 2,
+    z: center.z + maxDim * 4,
+    duration: 1.2, ease: 'power3.out'
+  })
+  controls.autoRotate = false
+
+  document.getElementById('panel-category')!.textContent = data.category
+  document.getElementById('panel-name')!.textContent = data.name
+  document.getElementById('panel-tagline')!.textContent = data.tagline
+  document.getElementById('panel-header')!.style.borderTop = `3px solid ${data.color}`
+
+  const benefitsEl = document.getElementById('panel-benefits')!
+  benefitsEl.innerHTML = data.benefits.map((b: string) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="width:4px;height:4px;border-radius:50%;background:${data.color};flex-shrink:0;"></div>
+      <span style="font-size:11px;font-family:sans-serif;opacity:0.8;">${b}</span>
+    </div>
+  `).join('')
+
+  document.getElementById('btn-video')!.onclick = () => window.open(data.video, '_blank')
+  document.getElementById('btn-brochure')!.onclick = () => window.open(data.brochure, '_blank')
+  document.getElementById('btn-contact')!.onclick = () => window.open(data.contact, '_blank')
+
+  document.getElementById('panel')!.style.display = 'block'
+})
+
+// STEP 6: CANVAS CLICK - isolate building
+window.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).closest('#panel,#back-btn,#hotspots,#hover-bubble')) return
+  if (isolatedObject) return
+
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
+  raycaster.setFromCamera(mouse, camera)
+
+  const allMeshes: THREE.Mesh[] = []
+  gltfScene?.traverse((c) => { if (c instanceof THREE.Mesh) allMeshes.push(c) })
+  const hits = raycaster.intersectObjects(allMeshes, false)
+  const hit = hits.find(h => catalog[(h.object as THREE.Mesh).name])
+
+  if (hit) {
+    const mesh = hit.object as THREE.Mesh
+    isolateObject(mesh)
+    spawnHotspotsOnObject(mesh)
+    bubble.style.display = 'none'
+    document.getElementById('panel')!.style.display = 'none'
+  }
 })
 
 window.addEventListener('resize', () => {
@@ -270,7 +333,7 @@ window.addEventListener('resize', () => {
   labelRenderer.setSize(window.innerWidth, window.innerHeight)
 })
 
-// --- LOAD GLB ---
+// ─── LOAD GLB ────────────────────────────────────────────────────────────────
 const loader = new GLTFLoader()
 loader.load('/glitch_city.glb', (gltf) => {
   gltfScene = gltf.scene
@@ -283,7 +346,7 @@ loader.load('/glitch_city.glb', (gltf) => {
     if (child instanceof THREE.Mesh) console.log('MESH:', child.name)
   })
 
-  // Enhance materials
+  // Material system
   gltfScene.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
     const mat = child.material as THREE.MeshStandardMaterial
@@ -303,35 +366,35 @@ loader.load('/glitch_city.glb', (gltf) => {
     else if (name.startsWith('Car')) { mat.color.set(0x0d1020); mat.roughness = 0.3; mat.metalness = 0.7 }
   })
 
-  gsap.from(camera.position, { y: 200, duration: 2.5, ease: 'power3.out' })
-  console.log('City loaded!')
-
-  // Floating product labels above T/M buildings
-  const productBuildings = ['T0','T1','T2','T3','T4','M0','M1','M2']
-  const labelData: Record<string,string> = {
-    'T0':'☀️ SOLAR', 'T1':'⚡ GENERATOR', 'T2':'❄️ HVAC',
-    'T3':'💡 LIGHTING', 'T4':'🖥️ BMS', 'M0':'🔥 FIRE',
-    'M1':'🔐 ACCESS', 'M2':'📷 CCTV'
+  // Floating labels above product buildings
+  const labelData: Record<string, string> = {
+    'T0': '☀️ SOLAR', 'T1': '⚡ GENERATOR', 'T2': '❄️ HVAC',
+    'T3': '💡 LIGHTING', 'T4': '🖥️ BMS',
+    'M0': '🔥 FIRE', 'M1': '🔐 ACCESS', 'M2': '📷 CCTV'
   }
   gltfScene!.traverse((child) => {
-    if (child instanceof THREE.Mesh && productBuildings.includes(child.name)) {
+    if (child instanceof THREE.Mesh && labelData[child.name]) {
       const box = new THREE.Box3().setFromObject(child)
       const top = box.max.y + 3
       const center = box.getCenter(new THREE.Vector3())
       const div = document.createElement('div')
       div.style.cssText = `position:fixed;background:rgba(5,10,24,0.85);border:0.5px solid rgba(100,140,255,0.4);border-radius:20px;padding:5px 12px;color:white;font-family:monospace;font-size:10px;letter-spacing:2px;pointer-events:none;white-space:nowrap;transform:translate(-50%,-50%);`
-      div.textContent = labelData[child.name] || child.name
+      div.textContent = labelData[child.name]
       document.body.appendChild(div)
-      floatingLabels.push({ div, position: new THREE.Vector3(center.x, top, center.z) })
+      floatingLabels.push({ div, position: new THREE.Vector3(center.x, top, center.z), meshName: child.name })
     }
   })
+
+  gsap.from(camera.position, { y: 200, duration: 2.5, ease: 'power3.out' })
+  console.log('City loaded!')
 })
 
-// --- ANIMATE LOOP ---
+// ─── ANIMATE LOOP ────────────────────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate)
   controls.update()
 
+  // Hotspot screen projection
   hotspots.forEach(h => {
     const projected = h.position.clone().project(camera)
     const inFront = projected.z < 1
@@ -350,6 +413,7 @@ function animate() {
     h.div.style.opacity = (inFront && !occluded) ? '1' : '0.15'
   })
 
+  // Floating label screen projection
   floatingLabels.forEach(l => {
     const projected = l.position.clone().project(camera)
     if (projected.z < 1 && !isolatedObject) {
