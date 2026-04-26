@@ -219,17 +219,17 @@ function updateBubbles() {
     if (projected.z >= 1) { entry.div.style.display = 'none'; return }
     const x = (projected.x * 0.5 + 0.5) * window.innerWidth
     const y = (-projected.y * 0.5 + 0.5) * window.innerHeight
-    entry.div.style.transform = `translate(${x - 16}px, ${y - 16}px)`
+    
     if (isolatedMesh && entry.meshName === isolatedMesh.name) {
       entry.div.style.display = 'none'
     } else {
       entry.div.style.display = 'flex'
       if (activeMesh && entry.meshName !== activeMesh.name) {
         entry.div.style.opacity = '0.3'
-        entry.div.style.transform = 'translate(-50%,-50%) scale(0.8)'
+        entry.div.style.transform = `translate(${x - 16}px, ${y - 16}px) scale(0.8)`
       } else {
         entry.div.style.opacity = '1'
-        entry.div.style.transform = 'translate(-50%,-50%) scale(1)'
+        entry.div.style.transform = `translate(${x - 16}px, ${y - 16}px) scale(1)`
       }
     }
   })
@@ -492,21 +492,23 @@ let mouseMoveScheduled = false
 let mouseX = 0
 let mouseY = 0
 
-window.addEventListener('mousemove', (e) => {
-  mouseX = e.clientX
-  mouseY = e.clientY
-  if (mouseMoveScheduled) return
-  mouseMoveScheduled = true
-  requestAnimationFrame(() => {
-    mouseMoveScheduled = false
-    if (isolatedMesh) { document.body.style.cursor = 'grab'; return }
-    mouse.x = (mouseX / window.innerWidth) * 2 - 1
-    mouse.y = -(mouseY / window.innerHeight) * 2 + 1
-    raycaster.setFromCamera(mouse, camera)
-    const hits = raycaster.intersectObjects(catalogMeshes, false)
-    document.body.style.cursor = hits.length > 0 ? 'pointer' : 'default'
+if (!isMobile) {
+  window.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX
+    mouseY = e.clientY
+    if (mouseMoveScheduled) return
+    mouseMoveScheduled = true
+    requestAnimationFrame(() => {
+      mouseMoveScheduled = false
+      if (isolatedMesh) { document.body.style.cursor = 'grab'; return }
+      mouse.x = (mouseX / window.innerWidth) * 2 - 1
+      mouse.y = -(mouseY / window.innerHeight) * 2 + 1
+      raycaster.setFromCamera(mouse, camera)
+      const hits = raycaster.intersectObjects(catalogMeshes, false)
+      document.body.style.cursor = hits.length > 0 ? 'pointer' : 'default'
+    })
   })
-})
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
