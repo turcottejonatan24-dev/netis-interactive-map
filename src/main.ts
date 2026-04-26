@@ -34,24 +34,35 @@ const hotspotData: Record<string, any[]> = {
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
 renderer.setSize(window.innerWidth, window.innerHeight)
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+
+const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
+renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5))
+
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.toneMappingExposure = 0.8
-renderer.shadowMap.enabled = true
-renderer.shadowMap.type = THREE.PCFSoftShadowMap
+
+if (isMobile) {
+  renderer.shadowMap.enabled = false
+} else {
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+}
 renderer.xr.enabled = true
 
 // ─── SCENE / CAMERA / CONTROLS ──────────────────────────────
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x020510)
-scene.fog = new THREE.FogExp2(0x020510, 0.007)
+scene.fog = new THREE.FogExp2(0x020510, isMobile ? 0.015 : 0.007)
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000)
 camera.position.set(50, 35, 50)
 
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.enableDamping = true
-controls.dampingFactor = 0.08
+controls.dampingFactor = 0.15
+controls.rotateSpeed = 1.2
+controls.zoomSpeed = 1.5
+controls.panSpeed = 1.2
 controls.maxPolarAngle = Math.PI / 2.2
 controls.minDistance = 20
 controls.maxDistance = 200
@@ -73,9 +84,6 @@ dirLight.shadow.camera.right = 150
 dirLight.shadow.camera.top = 150
 dirLight.shadow.camera.bottom = -150
 scene.add(dirLight)
-const warmPoint = new THREE.PointLight(0xff8833, 2, 80)
-warmPoint.position.set(-30, 10, -30)
-scene.add(warmPoint)
 
 // ─── STATE ──────────────────────────────────────────────────
 let gltfScene: THREE.Group | null = null
@@ -328,6 +336,13 @@ loader.load('/glitch_city.glb', (gltf) => {
   gltfScene = gltf.scene
   scene.add(gltfScene)
   applyMaterials(gltfScene)
+  scene.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      obj.frustumCulled = true
+      obj.matrixAutoUpdate = false
+      obj.updateMatrix()
+    }
+  })
   gltfScene.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
     const data = catalog[child.name]
@@ -370,7 +385,10 @@ window.addEventListener('resize', () => {
 })
 
 // ─── ANIMATE (XR-compatible) ────────────────────────────────
-renderer.setAnimationLoop(() => {
+let lastTime = 0
+renderer.setAnimationLoop((time) => {
+  if (time - lastTime < 16) return
+  lastTime = time
   controls.update()
   updateBubbles()
   if (hotspotEntries.length > 0) updateHotspots()
