@@ -74,21 +74,23 @@ scene.add(new THREE.AmbientLight(0x111827, 0.3))
 scene.add(new THREE.HemisphereLight(0x0a0e2a, 0x000000, 0.5))
 const dirLight = new THREE.DirectionalLight(0x4466ff, 1.5)
 dirLight.position.set(50, 80, 30)
-dirLight.castShadow = true
-dirLight.shadow.mapSize.width = 2048
-dirLight.shadow.mapSize.height = 2048
+dirLight.castShadow = !isMobile
+dirLight.shadow.mapSize.width = 1024
+dirLight.shadow.mapSize.height = 1024
 dirLight.shadow.camera.near = 0.5
 dirLight.shadow.camera.far = 500
-dirLight.shadow.camera.left = -150
-dirLight.shadow.camera.right = 150
-dirLight.shadow.camera.top = 150
-dirLight.shadow.camera.bottom = -150
+dirLight.shadow.camera.left = -80
+dirLight.shadow.camera.right = 80
+dirLight.shadow.camera.top = 80
+dirLight.shadow.camera.bottom = -80
 scene.add(dirLight)
 
 // ─── STATE ──────────────────────────────────────────────────
 let gltfScene: THREE.Group | null = null
 let isolatedMesh: THREE.Mesh | null = null
 let activeMesh: THREE.Mesh | null = null
+let allMeshes: THREE.Mesh[] = []
+let catalogMeshes: THREE.Mesh[] = []
 const raycaster = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
 
@@ -129,12 +131,9 @@ function onXRSelect(event: any) {
   tempMatrix.identity().extractRotation(ctrl.matrixWorld)
   raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld)
   raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix)
-  const meshes: THREE.Mesh[] = []
-  gltfScene?.traverse(c => { if (c instanceof THREE.Mesh) meshes.push(c) })
-  const hits = raycaster.intersectObjects(meshes, false)
-  const hit = hits.find(h => catalog[(h.object as THREE.Mesh).name])
-  if (hit) {
-    const mesh = hit.object as THREE.Mesh
+  const hits = raycaster.intersectObjects(catalogMeshes, false)
+  if (hits.length > 0) {
+    const mesh = hits[0].object as THREE.Mesh
     onBubbleClick(mesh, catalog[mesh.name])
   }
 }
@@ -169,8 +168,7 @@ function updateBubbles() {
     if (projected.z >= 1) { entry.div.style.display = 'none'; return }
     const x = (projected.x * 0.5 + 0.5) * window.innerWidth
     const y = (-projected.y * 0.5 + 0.5) * window.innerHeight
-    entry.div.style.left = x + 'px'
-    entry.div.style.top = y + 'px'
+    entry.div.style.transform = `translate(${x - 16}px, ${y - 16}px)`
     if (isolatedMesh && entry.meshName === isolatedMesh.name) {
       entry.div.style.display = 'none'
     } else {
@@ -247,8 +245,7 @@ function updateHotspots() {
     const x = (projected.x * 0.5 + 0.5) * window.innerWidth
     const y = (-projected.y * 0.5 + 0.5) * window.innerHeight
     entry.div.style.display = 'flex'
-    entry.div.style.left = x + 'px'
-    entry.div.style.top = y + 'px'
+    entry.div.style.transform = `translate(${x - 4}px, ${y - 4}px)`
   })
 }
 
@@ -336,8 +333,11 @@ loader.load('/glitch_city.glb', (gltf) => {
   gltfScene = gltf.scene
   scene.add(gltfScene)
   applyMaterials(gltfScene)
-  scene.traverse((obj) => {
+  gltfScene.traverse((obj) => {
     if (obj instanceof THREE.Mesh) {
+      allMeshes.push(obj)
+      if (catalog[obj.name]) catalogMeshes.push(obj)
+      obj.updateWorldMatrix(true, false)
       obj.frustumCulled = true
       obj.matrixAutoUpdate = false
       obj.updateMatrix()
@@ -360,22 +360,28 @@ window.addEventListener('click', (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
   raycaster.setFromCamera(mouse, camera)
-  const meshes: THREE.Mesh[] = []
-  gltfScene?.traverse(c => { if (c instanceof THREE.Mesh) meshes.push(c) })
-  const hits = raycaster.intersectObjects(meshes, false)
-  const hit = hits.find(h => catalog[(h.object as THREE.Mesh).name])
-  if (hit) { const mesh = hit.object as THREE.Mesh; onBubbleClick(mesh, catalog[mesh.name]) }
+  const hits = raycaster.intersectObjects(catalogMeshes, false)
+  if (hits.length > 0) { const mesh = hits[0].object as THREE.Mesh; onBubbleClick(mesh, catalog[mesh.name]) }
 })
 
+let mouseMoveScheduled = false
+let mouseX = 0
+let mouseY = 0
+
 window.addEventListener('mousemove', (e) => {
-  if (isolatedMesh) { document.body.style.cursor = 'grab'; return }
-  mouse.x = (e.clientX / window.innerWidth) * 2 - 1
-  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
-  raycaster.setFromCamera(mouse, camera)
-  const meshes: THREE.Mesh[] = []
-  gltfScene?.traverse(c => { if (c instanceof THREE.Mesh) meshes.push(c) })
-  const hits = raycaster.intersectObjects(meshes, false)
-  document.body.style.cursor = hits.find(h => catalog[(h.object as THREE.Mesh).name]) ? 'pointer' : 'default'
+  mouseX = e.clientX
+  mouseY = e.clientY
+  if (mouseMoveScheduled) return
+  mouseMoveScheduled = true
+  requestAnimationFrame(() => {
+    mouseMoveScheduled = false
+    if (isolatedMesh) { document.body.style.cursor = 'grab'; return }
+    mouse.x = (mouseX / window.innerWidth) * 2 - 1
+    mouse.y = -(mouseY / window.innerHeight) * 2 + 1
+    raycaster.setFromCamera(mouse, camera)
+    const hits = raycaster.intersectObjects(catalogMeshes, false)
+    document.body.style.cursor = hits.length > 0 ? 'pointer' : 'default'
+  })
 })
 
 window.addEventListener('resize', () => {

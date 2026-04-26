@@ -22,10 +22,12 @@
     }
 
     .bubble {
+      will-change: transform;
       position: fixed;
+      left: 0;
+      top: 0;
       width: 32px; height: 32px;
       border-radius: 50%;
-      transform: translate(-50%, -50%);
       cursor: pointer;
       pointer-events: auto;
       z-index: 40;
@@ -39,6 +41,7 @@
       transform: translate(-50%,-50%);
     }
     .bubble-ring {
+      will-change: transform, opacity;
       position: absolute;
       width: 32px; height: 32px;
       border-radius: 50%;
@@ -66,8 +69,10 @@
     .bubble:hover .bubble-label { opacity: 1; }
 
     .hotspot {
+      will-change: transform;
       position: fixed;
-      transform: translate(-50%,-50%);
+      left: 0;
+      top: 0;
       cursor: pointer;
       pointer-events: auto;
       z-index: 45;
