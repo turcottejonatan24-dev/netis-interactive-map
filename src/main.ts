@@ -369,7 +369,46 @@ function applyMaterials(root: THREE.Group) {
 }
 
 // ─── LOAD GLB ───────────────────────────────────────────────
-const loader = new GLTFLoader()
+const manager = new THREE.LoadingManager()
+
+manager.onStart = () => {
+  const txt = document.getElementById('progress-text')
+  if (txt) txt.textContent = 'CHARGEMENT VILLE...'
+  const bar = document.getElementById('progress-bar')
+  if (bar) bar.style.width = '10%'
+}
+
+manager.onProgress = (url, loaded, total) => {
+  const pct = Math.round(loaded / total * 100)
+  const bar = document.getElementById('progress-bar')
+  const txt = document.getElementById('progress-text')
+  if (bar) bar.style.width = pct + '%'
+  if (txt) txt.textContent = 'CHARGEMENT... ' + pct + '%'
+}
+
+manager.onLoad = () => {
+  const txt = document.getElementById('progress-text')
+  if (txt) txt.textContent = 'PRÊT'
+  
+  const uiElements = ['xr-buttons']
+  uiElements.forEach(id => {
+    const el = document.getElementById(id)
+    if (el) el.style.display = 'flex'
+  })
+  document.querySelectorAll('.ui-hint').forEach(el => {
+    (el as HTMLElement).style.display = 'block'
+  })
+  
+  setTimeout(() => {
+    const loader_el = document.getElementById('loader')
+    if (loader_el) {
+      loader_el.style.opacity = '0'
+      setTimeout(() => loader_el.style.display = 'none', 800)
+    }
+  }, 300)
+}
+
+const loader = new GLTFLoader(manager)
 loader.load('/glitch_city.glb', (gltf) => {
   gltfScene = gltf.scene
   scene.add(gltfScene)

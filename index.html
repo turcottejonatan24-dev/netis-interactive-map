@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Netis Interactive Map</title>
+  <link rel="preload" href="/glitch_city.glb" as="fetch" crossorigin>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #000; overflow: hidden; font-family: monospace; }
@@ -109,10 +110,31 @@
   </style>
 </head>
 <body>
+  <div id="loader" style="
+    position:fixed;top:0;left:0;
+    width:100%;height:100%;
+    background:#020510;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;
+    transition:opacity 0.8s ease;
+  ">
+    <div style="font-family:monospace;color:white;text-align:center;">
+      <div style="font-size:11px;letter-spacing:6px;opacity:0.4;margin-bottom:24px;">NETIS</div>
+      <div style="font-size:22px;font-weight:300;letter-spacing:3px;margin-bottom:40px;">INTERACTIVE MAP</div>
+      <div style="width:200px;height:1px;background:rgba(255,255,255,0.1);border-radius:1px;margin:0 auto 16px;">
+        <div id="progress-bar" style="height:1px;background:#4466ff;border-radius:1px;width:0%;transition:width 0.3s ease;"></div>
+      </div>
+      <div id="progress-text" style="font-size:9px;letter-spacing:3px;opacity:0.4;">INITIALISATION...</div>
+    </div>
+  </div>
+
   <canvas id="canvas"></canvas>
 
   <!-- UI top left -->
-  <div style="position:fixed;top:32px;left:32px;color:white;z-index:100;pointer-events:none;">
+  <div class="ui-hint" style="display:none;position:fixed;top:32px;left:32px;color:white;z-index:100;pointer-events:none;">
     <div style="font-size:9px;letter-spacing:4px;opacity:0.4;margin-bottom:6px;">NETIS INTERACTIVE MAP</div>
     <div style="font-size:24px;font-weight:300;letter-spacing:2px;">NETIS</div>
   </div>
@@ -193,16 +215,16 @@
   <div id="hotspots-container" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:45;"></div>
 
   <!-- XR Buttons -->
-  <div id="xr-buttons" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);display:flex;gap:12px;z-index:200;">
+  <div id="xr-buttons" style="display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);gap:12px;z-index:200;">
     <button id="vr-btn" style="background:rgba(5,10,24,0.9);border:0.5px solid rgba(100,140,255,0.4);border-radius:8px;padding:10px 20px;color:white;font-family:monospace;font-size:10px;letter-spacing:2px;cursor:pointer;">VR MODE</button>
     <button id="ar-btn" style="background:rgba(5,10,24,0.9);border:0.5px solid rgba(16,185,129,0.4);border-radius:8px;padding:10px 20px;color:white;font-family:monospace;font-size:10px;letter-spacing:2px;cursor:pointer;">AR MODE</button>
   </div>
 
   <!-- Bottom hints -->
-  <div style="position:fixed;bottom:32px;left:32px;color:white;opacity:0.3;font-size:9px;letter-spacing:2px;pointer-events:none;z-index:100;">
+  <div class="ui-hint" style="display:none;position:fixed;bottom:32px;left:32px;color:white;opacity:0.3;font-size:9px;letter-spacing:2px;pointer-events:none;z-index:100;">
     DRAG TO EXPLORE — SCROLL TO ZOOM
   </div>
-  <div style="position:fixed;bottom:32px;right:32px;color:white;opacity:0.3;font-size:9px;letter-spacing:2px;pointer-events:none;z-index:100;">
+  <div class="ui-hint" style="display:none;position:fixed;bottom:32px;right:32px;color:white;opacity:0.3;font-size:9px;letter-spacing:2px;pointer-events:none;z-index:100;">
     26.04.2026
   </div>
 
