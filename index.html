@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NETIS — Interactive City Map</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #000; overflow: hidden; }
+
+      /* Hotspots */
+      .hotspot {
+        position: fixed;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transform: translate(-50%, -50%);
+        cursor: pointer;
+        z-index: 50;
+        pointer-events: all;
+      }
+      .hotspot-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #4466ff;
+        flex-shrink: 0;
+        box-shadow: 0 0 8px #4466ff;
+      }
+      .hotspot-ring {
+        position: absolute;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 1px solid rgba(68, 102, 255, 0.6);
+        animation: pulse 2s ease-out infinite;
+        left: -6px;
+      }
+      .hotspot-label {
+        font-family: monospace;
+        font-size: 10px;
+        letter-spacing: 2px;
+        color: white;
+        opacity: 0.8;
+        white-space: nowrap;
+        background: rgba(5,10,24,0.7);
+        padding: 3px 8px;
+        border-radius: 4px;
+        border: 0.5px solid rgba(68,102,255,0.3);
+      }
+      @keyframes pulse {
+        0%   { transform: scale(1);   opacity: 0.8; }
+        100% { transform: scale(2.5); opacity: 0; }
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- Commercial product panel -->
+    <div id="panel" style="
+      display:none;
+      position:fixed;
+      top:50%;
+      right:40px;
+      transform:translateY(-50%);
+      width:320px;
+      background:rgba(5,10,24,0.95);
+      border:0.5px solid rgba(100,140,255,0.2);
+      border-radius:16px;
+      padding:0;
+      color:white;
+      font-family:monospace;
+      z-index:100;
+      backdrop-filter:blur(20px);
+      overflow:hidden;
+    ">
+      <div id="panel-header" style="padding:24px 24px 20px;border-bottom:0.5px solid rgba(255,255,255,0.08);position:relative;">
+        <div id="panel-close" style="position:absolute;top:16px;right:16px;cursor:pointer;opacity:0.4;font-size:16px;">✕</div>
+        <div id="panel-category" style="font-size:9px;letter-spacing:3px;margin-bottom:10px;opacity:0.6;"></div>
+        <div id="panel-name" style="font-size:22px;font-weight:300;letter-spacing:1px;margin-bottom:8px;"></div>
+        <div id="panel-tagline" style="font-size:12px;opacity:0.6;line-height:1.6;font-family:sans-serif;"></div>
+      </div>
+      <div style="padding:20px 24px;border-bottom:0.5px solid rgba(255,255,255,0.08);">
+        <div style="font-size:9px;letter-spacing:3px;opacity:0.4;margin-bottom:14px;">BÉNÉFICES CLÉS</div>
+        <div id="panel-benefits"></div>
+      </div>
+      <div style="padding:20px 24px;">
+        <div style="font-size:9px;letter-spacing:3px;opacity:0.4;margin-bottom:14px;">ACTIONS</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button id="btn-video" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:12px 16px;color:white;font-family:monospace;font-size:11px;letter-spacing:1px;cursor:pointer;text-align:left;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+            <span style="font-size:16px;">▶</span>
+            <div><div style="font-weight:500;">VOIR LA VIDÉO</div><div style="opacity:0.4;font-size:10px;margin-top:2px;">Présentation de la solution</div></div>
+          </button>
+          <button id="btn-brochure" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:12px 16px;color:white;font-family:monospace;font-size:11px;letter-spacing:1px;cursor:pointer;text-align:left;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+            <span style="font-size:16px;">↓</span>
+            <div><div style="font-weight:500;">TÉLÉCHARGER BROCHURE</div><div style="opacity:0.4;font-size:10px;margin-top:2px;">Fiche technique PDF</div></div>
+          </button>
+          <button id="btn-contact" style="display:flex;align-items:center;gap:10px;background:rgba(68,102,255,0.2);border:0.5px solid rgba(68,102,255,0.5);border-radius:8px;padding:12px 16px;color:white;font-family:monospace;font-size:11px;letter-spacing:1px;cursor:pointer;text-align:left;transition:all 0.2s;" onmouseover="this.style.background='rgba(68,102,255,0.35)'" onmouseout="this.style.background='rgba(68,102,255,0.2)'">
+            <span style="font-size:16px;">→</span>
+            <div><div style="font-weight:500;">NOUS CONTACTER</div><div style="opacity:0.6;font-size:10px;margin-top:2px;">Un expert vous répond sous 24h</div></div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Back to city button -->
+    <button id="back-btn" style="
+      display:none;
+      position:fixed;
+      top:40px;
+      right:40px;
+      background:rgba(5,10,24,0.9);
+      border:0.5px solid rgba(100,140,255,0.3);
+      border-radius:8px;
+      padding:10px 20px;
+      color:white;
+      font-family:monospace;
+      font-size:11px;
+      letter-spacing:2px;
+      cursor:pointer;
+      z-index:150;
+      align-items:center;
+      gap:8px;
+    ">← BACK TO CITY</button>
+
+    <!-- Hotspot detail panel -->
+    <div id="detail-panel" style="
+      display:none;
+      position:fixed;
+      bottom:40px;
+      left:50%;
+      transform:translateX(-50%);
+      background:rgba(5,10,24,0.95);
+      border:0.5px solid rgba(100,140,255,0.3);
+      border-radius:12px;
+      padding:24px 32px;
+      color:white;
+      font-family:monospace;
+      z-index:200;
+      backdrop-filter:blur(10px);
+      min-width:400px;
+    ">
+      <div id="detail-close" style="position:absolute;top:12px;right:16px;cursor:pointer;opacity:0.5;font-size:16px;">✕</div>
+      <div id="detail-tag" style="font-size:10px;letter-spacing:3px;opacity:0.5;margin-bottom:8px;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;" id="detail-grid"></div>
+    </div>
+
+    <!-- Hotspot container -->
+    <div id="hotspots" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50;"></div>
+
+    <!-- HUD overlay -->
+    <div id="ui" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;">
+      <div style="position:absolute;top:40px;left:40px;color:white;font-family:monospace;">
+        <div style="font-size:11px;letter-spacing:4px;opacity:0.5;margin-bottom:8px;">NETIS INTERACTIVE MAP</div>
+        <div style="font-size:28px;font-weight:300;letter-spacing:2px;">NETIS</div>
+      </div>
+      <div style="position:absolute;bottom:40px;right:40px;color:white;font-family:monospace;font-size:10px;opacity:0.4;letter-spacing:2px;">
+        DRAG TO EXPLORE — SCROLL TO ZOOM
+      </div>
+      <div style="position:absolute;bottom:40px;left:40px;color:white;font-family:monospace;font-size:10px;opacity:0.4;">
+        26.04.2026
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
