@@ -1,6 +1,9 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { VRButton } from 'three/examples/jsm/webxr/VRButton.js'
+import { ARButton } from 'three/examples/jsm/webxr/ARButton.js'
+import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js'
 import gsap from 'gsap'
 
 // ─── CATALOG ────────────────────────────────────────────────
@@ -20,7 +23,6 @@ const catalog: Record<string, any> = {
   'L2': { name: 'NETWORK INFRA', category: 'INFRASTRUCTURE RÉSEAU', color: '#0ea5e9', tagline: 'Câblage structuré et réseau WiFi professionnel', benefits: ['WiFi 6E', 'Câblage Cat8', 'Monitoring réseau'], video: 'https://youtube.com', brochure: '/brochures/network.pdf', contact: 'mailto:contact@netis.com' },
 }
 
-// ─── HOTSPOT DATA ───────────────────────────────────────────
 const hotspotData: Record<string, any[]> = {
   facade:   [{ label: 'FAÇADE',   specs: { Matériau: 'Béton armé', Épaisseur: '300 mm', Isolation: 'Classe A', État: 'Bon' }}],
   window:   [{ label: 'VITRAGE',  specs: { Type: 'Double vitrage', 'Coefficient U': '1.2 W/m²K', Largeur: '120 cm', Hauteur: '150 cm', État: 'Excellent' }}],
@@ -28,7 +30,7 @@ const hotspotData: Record<string, any[]> = {
   entrance: [{ label: 'ENTRÉE',   specs: { Type: 'Lobby principal', Accès: 'Sécurisé', Largeur: '3 m', État: 'Excellent' }}],
 }
 
-// ─── SCENE SETUP ────────────────────────────────────────────
+// ─── RENDERER ───────────────────────────────────────────────
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
 renderer.setSize(window.innerWidth, window.innerHeight)
@@ -37,7 +39,9 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.toneMappingExposure = 0.8
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.xr.enabled = true
 
+// ─── SCENE / CAMERA / CONTROLS ──────────────────────────────
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x020510)
 scene.fog = new THREE.FogExp2(0x020510, 0.007)
@@ -57,7 +61,6 @@ controls.autoRotateSpeed = 0.15
 // Lights
 scene.add(new THREE.AmbientLight(0x111827, 0.3))
 scene.add(new THREE.HemisphereLight(0x0a0e2a, 0x000000, 0.5))
-
 const dirLight = new THREE.DirectionalLight(0x4466ff, 1.5)
 dirLight.position.set(50, 80, 30)
 dirLight.castShadow = true
@@ -70,7 +73,6 @@ dirLight.shadow.camera.right = 150
 dirLight.shadow.camera.top = 150
 dirLight.shadow.camera.bottom = -150
 scene.add(dirLight)
-
 const warmPoint = new THREE.PointLight(0xff8833, 2, 80)
 warmPoint.position.set(-30, 10, -30)
 scene.add(warmPoint)
@@ -82,6 +84,55 @@ let activeMesh: THREE.Mesh | null = null
 const raycaster = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
 
+// ─── WEBXR BUTTONS & CONTROLLERS ────────────────────────────
+const vrButton = VRButton.createButton(renderer)
+vrButton.style.display = 'none'
+document.body.appendChild(vrButton)
+document.getElementById('vr-btn')!.addEventListener('click', () => vrButton.click())
+
+const arButton = ARButton.createButton(renderer, {
+  requiredFeatures: ['hit-test'],
+  optionalFeatures: ['dom-overlay'],
+  domOverlay: { root: document.body }
+})
+arButton.style.display = 'none'
+document.body.appendChild(arButton)
+document.getElementById('ar-btn')!.addEventListener('click', () => arButton.click())
+
+const controllerFactory = new XRControllerModelFactory()
+const controller1 = renderer.xr.getController(0)
+const controller2 = renderer.xr.getController(1)
+const controllerGrip1 = renderer.xr.getControllerGrip(0)
+controllerGrip1.add(controllerFactory.createControllerModel(controllerGrip1))
+const controllerGrip2 = renderer.xr.getControllerGrip(1)
+controllerGrip2.add(controllerFactory.createControllerModel(controllerGrip2))
+scene.add(controller1, controller2, controllerGrip1, controllerGrip2)
+
+const rayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-1)])
+const rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+const rayLine = new THREE.Line(rayGeo, rayMat)
+rayLine.scale.z = 5
+controller1.add(rayLine.clone())
+controller2.add(rayLine.clone())
+
+function onXRSelect(event: any) {
+  const ctrl = event.target
+  const tempMatrix = new THREE.Matrix4()
+  tempMatrix.identity().extractRotation(ctrl.matrixWorld)
+  raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld)
+  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix)
+  const meshes: THREE.Mesh[] = []
+  gltfScene?.traverse(c => { if (c instanceof THREE.Mesh) meshes.push(c) })
+  const hits = raycaster.intersectObjects(meshes, false)
+  const hit = hits.find(h => catalog[(h.object as THREE.Mesh).name])
+  if (hit) {
+    const mesh = hit.object as THREE.Mesh
+    onBubbleClick(mesh, catalog[mesh.name])
+  }
+}
+controller1.addEventListener('selectstart', onXRSelect)
+controller2.addEventListener('selectstart', onXRSelect)
+
 // ─── BUBBLES ────────────────────────────────────────────────
 interface BubbleEntry { div: HTMLElement; worldPos: THREE.Vector3; meshName: string }
 const bubbleEntries: BubbleEntry[] = []
@@ -91,7 +142,6 @@ function createBubble(mesh: THREE.Mesh, data: any): BubbleEntry {
   const box = new THREE.Box3().setFromObject(mesh)
   const center = box.getCenter(new THREE.Vector3())
   const worldPos = new THREE.Vector3(center.x, box.max.y + 5, center.z)
-
   const div = document.createElement('div')
   div.className = 'bubble'
   div.innerHTML = `
@@ -101,12 +151,7 @@ function createBubble(mesh: THREE.Mesh, data: any): BubbleEntry {
   `
   div.style.pointerEvents = 'auto'
   bubblesContainer.appendChild(div)
-
-  div.addEventListener('click', (e) => {
-    e.stopPropagation()
-    onBubbleClick(mesh, data)
-  })
-
+  div.addEventListener('click', (e) => { e.stopPropagation(); onBubbleClick(mesh, data) })
   return { div, worldPos, meshName: mesh.name }
 }
 
@@ -114,12 +159,10 @@ function updateBubbles() {
   bubbleEntries.forEach(entry => {
     const projected = entry.worldPos.clone().project(camera)
     if (projected.z >= 1) { entry.div.style.display = 'none'; return }
-
     const x = (projected.x * 0.5 + 0.5) * window.innerWidth
     const y = (-projected.y * 0.5 + 0.5) * window.innerHeight
     entry.div.style.left = x + 'px'
     entry.div.style.top = y + 'px'
-
     if (isolatedMesh && entry.meshName === isolatedMesh.name) {
       entry.div.style.display = 'none'
     } else {
@@ -135,36 +178,23 @@ function updateBubbles() {
   })
 }
 
-// ─── BUBBLE CLICK → ZOOM + PANEL ────────────────────────────
 function onBubbleClick(mesh: THREE.Mesh, data: any) {
   activeMesh = mesh
   controls.autoRotate = false
-
   const box = new THREE.Box3().setFromObject(mesh)
   const center = box.getCenter(new THREE.Vector3())
   const size = box.getSize(new THREE.Vector3())
   const maxDim = Math.max(size.x, size.y, size.z)
-
   gsap.to(controls.target, { x: center.x, y: center.y, z: center.z, duration: 1.2, ease: 'power3.out' })
-  gsap.to(camera.position, {
-    x: center.x + maxDim * 4,
-    y: center.y + maxDim * 2,
-    z: center.z + maxDim * 4,
-    duration: 1.2, ease: 'power3.out'
-  })
-
+  gsap.to(camera.position, { x: center.x + maxDim * 4, y: center.y + maxDim * 2, z: center.z + maxDim * 4, duration: 1.2, ease: 'power3.out' })
   spawnHotspots(mesh)
-
   document.getElementById('panel-category')!.textContent = data.category
   document.getElementById('panel-name')!.textContent = data.name
   document.getElementById('panel-tagline')!.textContent = data.tagline
   ;(document.getElementById('panel-header') as HTMLElement).style.borderTop = `3px solid ${data.color}`
-  document.getElementById('panel-benefits')!.innerHTML = data.benefits.map((b: string) => `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-      <div style="width:4px;height:4px;border-radius:50%;background:${data.color};flex-shrink:0;"></div>
-      <span style="font-size:11px;font-family:sans-serif;opacity:0.8;">${b}</span>
-    </div>
-  `).join('')
+  document.getElementById('panel-benefits')!.innerHTML = data.benefits.map((b: string) =>
+    `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:4px;height:4px;border-radius:50%;background:${data.color};flex-shrink:0;"></div><span style="font-size:11px;font-family:sans-serif;opacity:0.8;">${b}</span></div>`
+  ).join('')
   document.getElementById('btn-video')!.onclick = () => window.open(data.video, '_blank')
   document.getElementById('btn-brochure')!.onclick = () => window.open(data.brochure, '_blank')
   document.getElementById('btn-contact')!.onclick = () => window.open(data.contact, '_blank')
@@ -173,46 +203,32 @@ function onBubbleClick(mesh: THREE.Mesh, data: any) {
 }
 
 // ─── HOTSPOTS ───────────────────────────────────────────────
-interface HotspotEntry { div: HTMLElement; worldPos: THREE.Vector3; specs: any; label: string }
+interface HotspotEntry { div: HTMLElement; worldPos: THREE.Vector3 }
 let hotspotEntries: HotspotEntry[] = []
 const hotspotsContainer = document.getElementById('hotspots-container')!
 
-function clearHotspots() {
-  hotspotsContainer.innerHTML = ''
-  hotspotEntries = []
-}
+function clearHotspots() { hotspotsContainer.innerHTML = ''; hotspotEntries = [] }
 
 function spawnHotspots(mesh: THREE.Mesh) {
   clearHotspots()
   const box = new THREE.Box3().setFromObject(mesh)
   const center = box.getCenter(new THREE.Vector3())
   const size = box.getSize(new THREE.Vector3())
-
   const points = [
     { key: 'facade',   pos: new THREE.Vector3(center.x, center.y + size.y * 0.3, center.z + size.z * 0.5 + 1) },
     { key: 'window',   pos: new THREE.Vector3(center.x + size.x * 0.2, center.y + size.y * 0.1, center.z + size.z * 0.5 + 1) },
     { key: 'roof',     pos: new THREE.Vector3(center.x, center.y + size.y * 0.5 + 1, center.z) },
     { key: 'entrance', pos: new THREE.Vector3(center.x, center.y - size.y * 0.4, center.z + size.z * 0.5 + 1) },
   ]
-
   points.forEach(p => {
     const hData = hotspotData[p.key][0]
     const div = document.createElement('div')
     div.className = 'hotspot'
     div.style.pointerEvents = 'auto'
-    div.innerHTML = `
-      <div style="position:relative;width:8px;height:8px;">
-        <div class="hotspot-dot"></div>
-        <div class="hotspot-ring"></div>
-      </div>
-      <div class="hotspot-label">${hData.label}</div>
-    `
-    div.addEventListener('click', (e) => {
-      e.stopPropagation()
-      onHotspotClick(mesh, hData)
-    })
+    div.innerHTML = `<div style="position:relative;width:8px;height:8px;"><div class="hotspot-dot"></div><div class="hotspot-ring"></div></div><div class="hotspot-label">${hData.label}</div>`
+    div.addEventListener('click', (e) => { e.stopPropagation(); onHotspotClick(mesh, hData) })
     hotspotsContainer.appendChild(div)
-    hotspotEntries.push({ div, worldPos: p.pos, specs: hData.specs, label: hData.label })
+    hotspotEntries.push({ div, worldPos: p.pos })
   })
 }
 
@@ -228,46 +244,32 @@ function updateHotspots() {
   })
 }
 
-// ─── HOTSPOT CLICK → ISOLATE ────────────────────────────────
 function onHotspotClick(mesh: THREE.Mesh, hData: any) {
   isolatedMesh = mesh
-
   const box = new THREE.Box3().setFromObject(mesh)
   const center = box.getCenter(new THREE.Vector3())
   const size = box.getSize(new THREE.Vector3())
   const maxDim = Math.max(size.x, size.y, size.z)
-
   gltfScene!.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
     if (child === mesh) { child.visible = true; return }
     if (child.name.startsWith('WOn') || child.name.startsWith('WOff')) {
       const cb = new THREE.Box3().setFromObject(child)
-      const cc = cb.getCenter(new THREE.Vector3())
-      child.visible = box.clone().expandByScalar(5).containsPoint(cc)
+      child.visible = box.clone().expandByScalar(5).containsPoint(cb.getCenter(new THREE.Vector3()))
       return
     }
     child.visible = false
   })
-
   gsap.to(controls.target, { x: center.x, y: center.y, z: center.z, duration: 1.0, ease: 'power3.out' })
-  gsap.to(camera.position, {
-    x: center.x + maxDim * 2.5,
-    y: center.y + maxDim * 1.2,
-    z: center.z + maxDim * 2.5,
-    duration: 1.0, ease: 'power3.out'
-  })
+  gsap.to(camera.position, { x: center.x + maxDim * 2.5, y: center.y + maxDim * 1.2, z: center.z + maxDim * 2.5, duration: 1.0, ease: 'power3.out' })
   controls.autoRotate = true
   controls.autoRotateSpeed = 0.5
   controls.minDistance = maxDim
   controls.maxDistance = maxDim * 6
-
   document.getElementById('detail-tag')!.textContent = hData.label + ' — SPÉCIFICATIONS'
-  document.getElementById('detail-grid')!.innerHTML = Object.entries(hData.specs).map(([k, v]) => `
-    <div>
-      <div style="font-size:8px;opacity:0.4;letter-spacing:2px;margin-bottom:4px;">${k.toUpperCase()}</div>
-      <div style="font-size:12px;">${v as string}</div>
-    </div>
-  `).join('')
+  document.getElementById('detail-grid')!.innerHTML = Object.entries(hData.specs).map(([k, v]) =>
+    `<div><div style="font-size:8px;opacity:0.4;letter-spacing:2px;margin-bottom:4px;">${k.toUpperCase()}</div><div style="font-size:12px;">${v as string}</div></div>`
+  ).join('')
   document.getElementById('detail-panel')!.style.display = 'block'
 }
 
@@ -280,13 +282,9 @@ function goBack() {
     controls.minDistance = 20
     controls.maxDistance = 200
     document.getElementById('detail-panel')!.style.display = 'none'
-    if (activeMesh) {
-      const data = catalog[activeMesh.name]
-      if (data) onBubbleClick(activeMesh, data)
-    }
+    if (activeMesh) { const data = catalog[activeMesh.name]; if (data) onBubbleClick(activeMesh, data) }
     return
   }
-
   activeMesh = null
   controls.autoRotate = true
   controls.autoRotateSpeed = 0.15
@@ -330,43 +328,30 @@ loader.load('/glitch_city.glb', (gltf) => {
   gltfScene = gltf.scene
   scene.add(gltfScene)
   applyMaterials(gltfScene)
-
   gltfScene.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
-    console.log('MESH:', child.name)
     const data = catalog[child.name]
-    if (data) {
-      const entry = createBubble(child, data)
-      bubbleEntries.push(entry)
-    }
+    if (data) bubbleEntries.push(createBubble(child, data))
   })
-
   gsap.from(camera.position, { y: 150, duration: 2.5, ease: 'power3.out' })
   console.log('City loaded! Bubbles:', bubbleEntries.length)
 })
 
-// ─── CLICK ON CANVAS ────────────────────────────────────────
+// ─── INTERACTIONS ───────────────────────────────────────────
 window.addEventListener('click', (e) => {
   const target = e.target as HTMLElement
   if (target.closest('#panel,#detail-panel,#back-btn,#bubbles-container,#hotspots-container')) return
   if (isolatedMesh) return
-
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
   raycaster.setFromCamera(mouse, camera)
-
   const meshes: THREE.Mesh[] = []
   gltfScene?.traverse(c => { if (c instanceof THREE.Mesh) meshes.push(c) })
   const hits = raycaster.intersectObjects(meshes, false)
   const hit = hits.find(h => catalog[(h.object as THREE.Mesh).name])
-
-  if (hit) {
-    const mesh = hit.object as THREE.Mesh
-    onBubbleClick(mesh, catalog[mesh.name])
-  }
+  if (hit) { const mesh = hit.object as THREE.Mesh; onBubbleClick(mesh, catalog[mesh.name]) }
 })
 
-// ─── HOVER CURSOR ───────────────────────────────────────────
 window.addEventListener('mousemove', (e) => {
   if (isolatedMesh) { document.body.style.cursor = 'grab'; return }
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1
@@ -375,23 +360,19 @@ window.addEventListener('mousemove', (e) => {
   const meshes: THREE.Mesh[] = []
   gltfScene?.traverse(c => { if (c instanceof THREE.Mesh) meshes.push(c) })
   const hits = raycaster.intersectObjects(meshes, false)
-  const hit = hits.find(h => catalog[(h.object as THREE.Mesh).name])
-  document.body.style.cursor = hit ? 'pointer' : 'default'
+  document.body.style.cursor = hits.find(h => catalog[(h.object as THREE.Mesh).name]) ? 'pointer' : 'default'
 })
 
-// ─── RESIZE ─────────────────────────────────────────────────
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
   camera.updateProjectionMatrix()
   renderer.setSize(window.innerWidth, window.innerHeight)
 })
 
-// ─── ANIMATE ────────────────────────────────────────────────
-function animate() {
-  requestAnimationFrame(animate)
+// ─── ANIMATE (XR-compatible) ────────────────────────────────
+renderer.setAnimationLoop(() => {
   controls.update()
   updateBubbles()
   if (hotspotEntries.length > 0) updateHotspots()
   renderer.render(scene, camera)
-}
-animate()
+})
