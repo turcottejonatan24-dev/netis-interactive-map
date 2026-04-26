@@ -6,6 +6,8 @@ import { ARButton } from 'three/examples/jsm/webxr/ARButton.js'
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js'
 import gsap from 'gsap'
 
+const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+
 // ─── CATALOG ────────────────────────────────────────────────
 const catalog: Record<string, any> = {
   'T0': { name: 'SOLAR SOLUTIONS', category: 'ÉNERGIE RENOUVELABLE', color: '#f59e0b', tagline: 'Production solaire intelligente pour bâtiments tertiaires', benefits: ['Réduction facture -60%', 'ROI en 4 ans', 'Monitoring temps réel'], video: 'https://youtube.com', brochure: '/brochures/solar.pdf', contact: 'mailto:contact@netis.com' },
@@ -32,24 +34,31 @@ const hotspotData: Record<string, any[]> = {
 
 // ─── RENDERER ───────────────────────────────────────────────
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
-renderer.setSize(window.innerWidth, window.innerHeight)
-
-const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
+const renderer = new THREE.WebGLRenderer({ 
+  canvas,
+  antialias: !isMobile,
+  powerPreference: 'high-performance',
+  precision: isMobile ? 'mediump' : 'highp'
+})
 renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5))
+renderer.shadowMap.enabled = !isMobile
+if (!isMobile) {
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+}
 
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.toneMappingExposure = 0.8
-
-if (isMobile) {
-  renderer.shadowMap.enabled = false
-} else {
-  renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
-}
 renderer.xr.enabled = true
 
-// ─── SCENE / CAMERA / CONTROLS ──────────────────────────────
+  renderer.setSize(window.innerWidth, window.innerHeight)
+})
+
+renderer.domElement.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault()
+  console.warn('WebGL context lost - reloading')
+  setTimeout(() => window.location.reload(), 2000)
+})
+
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x020510)
 scene.fog = new THREE.FogExp2(0x020510, isMobile ? 0.015 : 0.007)
@@ -70,20 +79,21 @@ controls.autoRotate = true
 controls.autoRotateSpeed = 0.15
 
 // Lights
-const ambient = new THREE.AmbientLight(0x111827, 0.3)
+const ambient = new THREE.AmbientLight(0x111827, isMobile ? 1.5 : 0.3)
 scene.add(ambient)
-scene.add(new THREE.HemisphereLight(0x0a0e2a, 0x000000, 0.5))
+const hemi = new THREE.HemisphereLight(0x0a0e2a, 0x000000, 0.5)
+scene.add(hemi)
 const dirLight = new THREE.DirectionalLight(0x4466ff, 1.5)
 dirLight.position.set(50, 80, 30)
-dirLight.castShadow = !isMobile
-dirLight.shadow.mapSize.width = 1024
-dirLight.shadow.mapSize.height = 1024
-dirLight.shadow.camera.near = 0.5
-dirLight.shadow.camera.far = 500
-dirLight.shadow.camera.left = -80
-dirLight.shadow.camera.right = 80
-dirLight.shadow.camera.top = 80
-dirLight.shadow.camera.bottom = -80
+if (!isMobile) {
+  dirLight.castShadow = true
+  dirLight.shadow.mapSize.width = 1024
+  dirLight.shadow.mapSize.height = 1024
+  dirLight.shadow.camera.left = -80
+  dirLight.shadow.camera.right = 80
+  dirLight.shadow.camera.top = 80
+  dirLight.shadow.camera.bottom = -80
+}
 scene.add(dirLight)
 
 // ─── STATE ──────────────────────────────────────────────────
@@ -345,26 +355,60 @@ function goBack() {
 ;(window as any).goBack = goBack
 
 // ─── MATERIALS ──────────────────────────────────────────────
-function applyMaterials(root: THREE.Group) {
-  root.traverse((child) => {
+function applyMaterials(scene: THREE.Group) {
+  scene.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return
     const mat = child.material as THREE.MeshStandardMaterial
     if (!mat) return
-    const n = child.name
-    if (n === 'Ground') { mat.color.set(0x060a18); mat.roughness = 1; mat.polygonOffset = true; mat.polygonOffsetFactor = -1 }
-    else if (n.startsWith('RdH') || n.startsWith('RdV')) { mat.color.set(0x030508); mat.roughness = 1; mat.polygonOffset = true; mat.polygonOffsetFactor = -1 }
-    else if (n.startsWith('SwH') || n.startsWith('SwV')) { mat.color.set(0x090d1a); mat.roughness = 0.9; mat.polygonOffset = true; mat.polygonOffsetFactor = -2 }
-    else if (n.startsWith('WOn')) { mat.color.set(0xffffff); mat.emissive = new THREE.Color(0xffcc55); mat.emissiveIntensity = 5 }
-    else if (n.startsWith('WOff')) { mat.color.set(0x111111); mat.emissiveIntensity = 0 }
-    else if (n.match(/^T\d+$/)) { mat.color.set(0x1a2035); mat.roughness = 0.6; mat.metalness = 0.3 }
-    else if (n.match(/^M\d+$/)) { mat.color.set(0x141826); mat.roughness = 0.7; mat.metalness = 0.2 }
-    else if (n.match(/^L\d+$/)) { mat.color.set(0x0f1220); mat.roughness = 0.8; mat.metalness = 0.1 }
-    else if (n.startsWith('Pole')) { mat.color.set(0x222233); mat.roughness = 0.5; mat.metalness = 0.8 }
-    else if (n.startsWith('Trk')) { mat.color.set(0x1a0f05) }
-    else if (n.startsWith('Fol')) { mat.color.set(0x0a1f0a); mat.roughness = 1 }
-    else if (n.startsWith('Car')) { mat.color.set(0x0d1020); mat.roughness = 0.3; mat.metalness = 0.7 }
-    child.castShadow = true
-    child.receiveShadow = true
+    
+    // Only enable shadows on desktop
+    if (!isMobile) {
+      child.castShadow = true
+      child.receiveShadow = true
+    }
+    
+    child.frustumCulled = true
+    child.matrixAutoUpdate = false
+    child.updateMatrix()
+    
+    const name = child.name
+    if (name === 'Ground') { 
+      mat.color.set(0x060a18); mat.roughness = 1
+      mat.polygonOffset = true; mat.polygonOffsetFactor = -1 
+    }
+    else if (name.startsWith('RdH') || name.startsWith('RdV')) { 
+      mat.color.set(0x030508); mat.roughness = 1
+      mat.polygonOffset = true; mat.polygonOffsetFactor = -1 
+    }
+    else if (name.startsWith('SwH') || name.startsWith('SwV')) { 
+      mat.color.set(0x090d1a); mat.roughness = 0.9
+      mat.polygonOffset = true; mat.polygonOffsetFactor = -2 
+    }
+    else if (name.startsWith('WOn')) { 
+      mat.color.set(0xffffff)
+      mat.emissive = new THREE.Color(0xffcc55)
+      mat.emissiveIntensity = isMobile ? 3 : 5
+    }
+    else if (name.startsWith('WOff')) { 
+      mat.color.set(0x111111); mat.emissiveIntensity = 0 
+    }
+    else if (name.match(/^T\d+$/)) { 
+      mat.color.set(0x1a2035); mat.roughness = 0.6; mat.metalness = 0.3 
+    }
+    else if (name.match(/^M\d+$/)) { 
+      mat.color.set(0x141826); mat.roughness = 0.7; mat.metalness = 0.2 
+    }
+    else if (name.match(/^L\d+$/)) { 
+      mat.color.set(0x0f1220); mat.roughness = 0.8; mat.metalness = 0.1 
+    }
+    else if (name.startsWith('Pole')) { 
+      mat.color.set(0x222233); mat.roughness = 0.5; mat.metalness = 0.8 
+    }
+    else if (name.startsWith('Trk')) { mat.color.set(0x1a0f05) }
+    else if (name.startsWith('Fol')) { mat.color.set(0x0a1f0a); mat.roughness = 1 }
+    else if (name.startsWith('Car')) { 
+      mat.color.set(0x0d1020); mat.roughness = 0.3; mat.metalness = 0.7 
+    }
   })
 }
 
